@@ -1,0 +1,61 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# =========================
+# Ambientes virtuais
+# =========================
+venv/
+.env/
+.venv/
+
+# =========================
+# Streamlit
+# =========================
+.streamlit/secrets.toml
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Jupyter / IPython
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Arquivos de dados locais
+# (evita subir CSVs pesados ou dados sensíveis)
+# =========================
+*.csv
+*.xlsx
+*.xls
+
+# =========================
+# Cache e builds
+# =========================
+.cache/
+dist/
+build/
+
+# =========================
+# Sistema operacional (Windows)
+# =========================
+Thumbs.db
+desktop.ini
+
+# =========================
+# VS Code / IDEs
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Render / Deploy
+# =========================
+.DS_Store
