@@ -1,261 +1,281 @@
+# =========================
 # Imports
+# =========================
 import pandas as pd
 import streamlit as st
+import numpy as np
+
+from datetime import datetime
 from io import BytesIO
 
 # =========================
-# Funções auxiliares
+# Configurações iniciais
 # =========================
+st.set_page_config(
+    page_title="RFV - Segmentação de Clientes",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# =========================
+# Funções utilitárias
+# =========================
 @st.cache_data
 def convert_df(df):
-    return df.to_csv(index=False).encode('utf-8')
+    return df.to_csv(index=False).encode("utf-8")
 
 
 @st.cache_data
 def to_excel(df):
     output = BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=False, sheet_name='RFV')
-    writer.close()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="RFV")
     return output.getvalue()
 
 
 # =========================
 # Funções de classificação RFV
 # =========================
-
 def recencia_class(x, r, q_dict):
-    """
-    Quanto menor a recência, melhor o cliente
-    """
+    """Quanto menor a recência, melhor"""
     if x <= q_dict[r][0.25]:
-        return 'A'
+        return "A"
     elif x <= q_dict[r][0.50]:
-        return 'B'
+        return "B"
     elif x <= q_dict[r][0.75]:
-        return 'C'
+        return "C"
     else:
-        return 'D'
+        return "D"
 
 
 def freq_val_class(x, fv, q_dict):
-    """
-    Quanto maior a frequência ou valor, melhor o cliente
-    """
+    """Quanto maior a frequência/valor, melhor"""
     if x <= q_dict[fv][0.25]:
-        return 'D'
+        return "D"
     elif x <= q_dict[fv][0.50]:
-        return 'C'
+        return "C"
     elif x <= q_dict[fv][0.75]:
-        return 'B'
+        return "B"
     else:
-        return 'A'
+        return "A"
 
 
 # =========================
-# Função principal
+# Aplicação principal
 # =========================
-
 def main():
 
-    st.set_page_config(
-        page_title='Segmentação RFV',
-        layout='wide',
-        initial_sidebar_state='expanded'
+    st.title("📊 Segmentação de Clientes com RFV")
+
+    st.markdown(
+        """
+        RFV significa **Recência, Frequência e Valor** e é uma técnica usada para
+        segmentar clientes com base no comportamento de compra.
+
+        **Componentes:**
+        - **Recência (R):** Dias desde a última compra  
+        - **Frequência (F):** Número de compras no período  
+        - **Valor (V):** Total gasto no período  
+
+        O objetivo é apoiar **ações de marketing e CRM mais eficientes**.
+        """
     )
-
-    st.title("📊 Segmentação de Clientes RFV")
-
-    st.markdown("""
-    RFV significa **Recência, Frequência e Valor** e é uma técnica utilizada para segmentação de clientes
-    baseada no comportamento de compras.
-
-    **Componentes:**
-    - **Recência (R):** Dias desde a última compra  
-    - **Frequência (F):** Número de compras no período  
-    - **Valor (V):** Total gasto no período  
-    """)
 
     st.markdown("---")
 
     # =========================
     # Upload do arquivo
     # =========================
-
-    st.sidebar.header("📁 Upload do arquivo")
-    data_file = st.sidebar.file_uploader(
+    st.sidebar.header("📂 Upload do arquivo")
+    uploaded_file = st.sidebar.file_uploader(
         "Envie um arquivo CSV ou Excel",
-        type=['csv', 'xlsx']
+        type=["csv", "xlsx"]
     )
 
-    if data_file is None:
-        st.info("👈 Faça upload de um arquivo para iniciar a análise.")
+    if uploaded_file is None:
+        st.info("👈 Faça o upload de um arquivo para iniciar a análise.")
         return
 
     # =========================
     # Leitura do arquivo
     # =========================
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            df_compras = pd.read_csv(
+                uploaded_file,
+                parse_dates=["DiaCompra"],
+                infer_datetime_format=True
+            )
+        else:
+            df_compras = pd.read_excel(
+                uploaded_file,
+                parse_dates=["DiaCompra"]
+            )
+    except Exception as e:
+        st.error(f"❌ Erro ao ler o arquivo: {e}")
+        st.stop()
 
-    if data_file.name.endswith('.csv'):
-        df_compras = pd.read_csv(
-            data_file,
-            parse_dates=['DiaCompra']
-        )
-    else:
-        df_compras = pd.read_excel(
-            data_file,
-            parse_dates=['DiaCompra']
-        )
+    # =========================
+    # Validação das colunas
+    # =========================
+    colunas_esperadas = {
+        "ID_cliente",
+        "DiaCompra",
+        "CodigoCompra",
+        "ValorTotal"
+    }
 
-    st.subheader("📄 Prévia dos dados")
-    st.write(df_compras.head())
+    colunas_arquivo = set(df_compras.columns)
+
+    if not colunas_esperadas.issubset(colunas_arquivo):
+        st.error(
+            f"""
+            ❌ **Arquivo inválido**
+
+            O arquivo deve conter as seguintes colunas obrigatórias:
+
+            `{colunas_esperadas}`
+
+            **Colunas encontradas no arquivo:**
+            `{colunas_arquivo}`
+            """
+        )
+        st.stop()
 
     # =========================
     # Recência
     # =========================
+    st.header("🔁 Recência (R)")
 
-    st.subheader("🕒 Recência (R)")
-
-    dia_atual = df_compras['DiaCompra'].max()
-    st.write("Data mais recente na base:", dia_atual)
+    dia_atual = df_compras["DiaCompra"].max()
+    st.write(f"📅 Data mais recente na base: **{dia_atual.date()}**")
 
     df_recencia = (
-        df_compras
-        .groupby('ID_cliente', as_index=False)['DiaCompra']
+        df_compras.groupby("ID_cliente", as_index=False)["DiaCompra"]
         .max()
+        .rename(columns={"DiaCompra": "DiaUltimaCompra"})
     )
 
-    df_recencia.columns = ['ID_cliente', 'DiaUltimaCompra']
-    df_recencia['Recencia'] = (
-        df_recencia['DiaUltimaCompra']
-        .apply(lambda x: (dia_atual - x).days)
+    df_recencia["Recencia"] = (
+        df_recencia["DiaUltimaCompra"].apply(lambda x: (dia_atual - x).days)
     )
 
-    df_recencia.drop(columns='DiaUltimaCompra', inplace=True)
-
-    st.write(df_recencia.head())
+    df_recencia.drop(columns="DiaUltimaCompra", inplace=True)
+    st.dataframe(df_recencia.head())
 
     # =========================
     # Frequência
     # =========================
-
-    st.subheader("🔁 Frequência (F)")
+    st.header("🔂 Frequência (F)")
 
     df_frequencia = (
-        df_compras[['ID_cliente', 'CodigoCompra']]
-        .groupby('ID_cliente')
+        df_compras.groupby("ID_cliente")["CodigoCompra"]
         .count()
         .reset_index()
+        .rename(columns={"CodigoCompra": "Frequencia"})
     )
 
-    df_frequencia.columns = ['ID_cliente', 'Frequencia']
-    st.write(df_frequencia.head())
+    st.dataframe(df_frequencia.head())
 
     # =========================
     # Valor
     # =========================
-
-    st.subheader("💰 Valor (V)")
+    st.header("💰 Valor (V)")
 
     df_valor = (
-        df_compras[['ID_cliente', 'ValorTotal']]
-        .groupby('ID_cliente')
+        df_compras.groupby("ID_cliente")["ValorTotal"]
         .sum()
         .reset_index()
+        .rename(columns={"ValorTotal": "Valor"})
     )
 
-    df_valor.columns = ['ID_cliente', 'Valor']
-    st.write(df_valor.head())
+    st.dataframe(df_valor.head())
 
     # =========================
     # Tabela RFV
     # =========================
-
-    st.subheader("📌 Tabela RFV")
+    st.header("📋 Tabela RFV Final")
 
     df_RFV = (
         df_recencia
-        .merge(df_frequencia, on='ID_cliente')
-        .merge(df_valor, on='ID_cliente')
+        .merge(df_frequencia, on="ID_cliente")
+        .merge(df_valor, on="ID_cliente")
+        .set_index("ID_cliente")
     )
 
-    df_RFV.set_index('ID_cliente', inplace=True)
-    st.write(df_RFV.head())
+    st.dataframe(df_RFV.head())
 
     # =========================
-    # Segmentação RFV
+    # Segmentação
     # =========================
+    st.header("🏷 Segmentação RFV")
 
-    st.subheader("🧠 Segmentação RFV")
+    quartis = df_RFV.quantile(q=[0.25, 0.5, 0.75])
+    st.write("📐 Quartis:")
+    st.dataframe(quartis)
 
-    quartis = df_RFV.quantile(q=[0.25, 0.50, 0.75])
-    st.write("Quartis:")
-    st.write(quartis)
-
-    df_RFV['R_quartil'] = df_RFV['Recencia'].apply(
-        recencia_class, args=('Recencia', quartis)
+    df_RFV["R_quartil"] = df_RFV["Recencia"].apply(
+        recencia_class, args=("Recencia", quartis)
     )
-    df_RFV['F_quartil'] = df_RFV['Frequencia'].apply(
-        freq_val_class, args=('Frequencia', quartis)
+    df_RFV["F_quartil"] = df_RFV["Frequencia"].apply(
+        freq_val_class, args=("Frequencia", quartis)
     )
-    df_RFV['V_quartil'] = df_RFV['Valor'].apply(
-        freq_val_class, args=('Valor', quartis)
-    )
-
-    df_RFV['RFV_Score'] = (
-        df_RFV['R_quartil'] +
-        df_RFV['F_quartil'] +
-        df_RFV['V_quartil']
+    df_RFV["V_quartil"] = df_RFV["Valor"].apply(
+        freq_val_class, args=("Valor", quartis)
     )
 
-    st.write(df_RFV.head())
+    df_RFV["RFV_Score"] = (
+        df_RFV["R_quartil"]
+        + df_RFV["F_quartil"]
+        + df_RFV["V_quartil"]
+    )
+
+    st.dataframe(df_RFV.head())
 
     # =========================
-    # Distribuição dos grupos
+    # Gráficos
     # =========================
+    st.header("📊 Distribuição dos RFV Scores")
 
-    st.subheader("📊 Distribuição dos segmentos")
-    st.write(df_RFV['RFV_Score'].value_counts())
+    rfv_dist = df_RFV["RFV_Score"].value_counts().sort_index()
+    st.bar_chart(rfv_dist)
 
     # =========================
     # Ações de Marketing
     # =========================
-
-    st.subheader("🎯 Ações de Marketing / CRM")
+    st.header("🎯 Ações de Marketing / CRM")
 
     dict_acoes = {
-        'AAA': 'Clientes VIP: recompensas, lançamentos exclusivos e programas de fidelidade',
-        'DDD': 'Clientes inativos: não priorizar ações',
-        'DAA': 'Clientes em risco: campanhas de reativação com descontos',
-        'CAA': 'Clientes em risco: campanhas de reativação'
+        "AAA": "Clientes VIP – benefícios exclusivos",
+        "DDD": "Clientes inativos – sem ação",
+        "DAA": "Clientes valiosos em risco – campanha de recuperação",
+        "CAA": "Clientes valiosos em risco – campanha de recuperação",
     }
 
-    df_RFV['Ação_Marketing'] = df_RFV['RFV_Score'].map(dict_acoes)
+    df_RFV["Ação de Marketing"] = df_RFV["RFV_Score"].map(dict_acoes)
 
-    st.write(df_RFV.head())
+    st.dataframe(df_RFV.head())
+
+    st.subheader("Distribuição das ações")
+    acoes_dist = df_RFV["Ação de Marketing"].value_counts(dropna=False)
+    st.bar_chart(acoes_dist)
 
     # =========================
     # Download
     # =========================
+    st.header("📥 Download dos Resultados")
 
-    st.subheader("⬇️ Download dos resultados")
-
-    df_xlsx = to_excel(df_RFV)
-
+    df_xlsx = to_excel(df_RFV.reset_index())
     st.download_button(
-        label='📥 Baixar RFV em Excel',
+        label="⬇️ Baixar RFV em Excel",
         data=df_xlsx,
-        file_name='RFV_resultado.xlsx'
+        file_name="RFV_resultado.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-    st.write("Quantidade de clientes por tipo de ação:")
-    st.write(df_RFV['Ação_Marketing'].value_counts(dropna=False))
 
 
 # =========================
 # Execução
 # =========================
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
